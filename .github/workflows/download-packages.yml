@@ -12,16 +12,13 @@ name: Download NPM Packages & Create Release
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  # Trigger on every push to main or master
   push:
     branches:
       - main
       - master
-    # Also trigger on version tags
     tags:
       - 'v*.*.*'
 
-  # Allow manual trigger with a custom tag
   workflow_dispatch:
     inputs:
       release_tag:
@@ -36,7 +33,6 @@ on:
 permissions:
   contents: write
 
-# Cancel any in-progress run on the same branch/tag
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -53,6 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.set-tag.outputs.tag }}
+      is_versioned: ${{ steps.set-tag.outputs.is_versioned }}
     steps:
       - name: Set release tag
         id: set-tag
@@ -60,15 +57,27 @@ jobs:
           if [ -n "${{ github.event.inputs.release_tag }}" ]; then
             # Manual input takes priority
             TAG="${{ github.event.inputs.release_tag }}"
+            IS_VERSIONED="false"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             # Push to a version tag (e.g. git push origin v1.2.0)
             TAG="${{ github.ref_name }}"
-          else:
+            IS_VERSIONED="true"
+          else
             # Push to main/master → auto-generate tag from date + short SHA
+            # FIX: was `else:` (invalid bash syntax) — colon removed
             TAG="v$(date -u +'%Y.%m.%d')-$(echo '${{ github.sha }}' | cut -c1-7)"
+            IS_VERSIONED="false"
           fi
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "Resolved release tag: ${TAG}"
+
+          # Guard: abort early if tag is still empty (should never happen now)
+          if [ -z "$TAG" ]; then
+            echo "❌ ERROR: could not resolve a release tag. Aborting."
+            exit 1
+          fi
+
+          echo "tag=${TAG}"           >> $GITHUB_OUTPUT
+          echo "is_versioned=${IS_VERSIONED}" >> $GITHUB_OUTPUT
+          echo "Resolved release tag: ${TAG} (versioned=${IS_VERSIONED})"
 
   # ────────────────────────────────────────────────────────────────────────────
   # JOB 1-10 — Download each framework's packages in parallel
@@ -333,10 +342,24 @@ jobs:
       - download-nodejs-backend
 
     env:
+      # FIX: pull tag directly from the job output — the job-level env block
+      # is evaluated before steps run, so it's the safe place to set this once.
       RELEASE_TAG: ${{ needs.resolve-tag.outputs.release_tag }}
+      IS_VERSIONED: ${{ needs.resolve-tag.outputs.is_versioned }}
 
     steps:
+      # FIX: fetch-depth: 0 so `git log` has history for the commit message
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag
+        run: |
+          if [ -z "${{ env.RELEASE_TAG }}" ]; then
+            echo "❌ RELEASE_TAG is empty — cannot create a release without a tag."
+            exit 1
+          fi
+          echo "✅ Release tag: ${{ env.RELEASE_TAG }}"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -356,7 +379,6 @@ jobs:
           mkdir -p release/node_modules_by_framework
           mkdir -p release/package_jsons
 
-          # Move framework tarballs into flat structure
           for fw in react-vite nextjs vuejs-vite nuxt angular svelte remix astro gatsby nodejs-backend; do
             src="downloaded-artifacts/${fw}-modules/${fw}-node_modules.tar.gz"
             if [ -f "$src" ]; then
@@ -367,24 +389,39 @@ jobs:
             fi
           done
 
-          # Copy all package.json files
           for fw in react-vite nextjs vuejs-vite nuxt angular svelte remix astro gatsby nodejs-backend; do
             mkdir -p "release/package_jsons/$fw"
             cp "packages/$fw/package.json" "release/package_jsons/$fw/"
           done
 
-          # Copy install scripts
           cp scripts/install-offline.sh release/
           cp scripts/install-offline.ps1 release/
           cp README.md release/
           chmod +x release/install-offline.sh
 
       - name: Generate MANIFEST
+        # FIX: use quoted `<< 'EOF'` so the inner $(...) subshells run at
+        # execution time inside the heredoc, not at parse time by the shell
+        # layer that handles unquoted EOF — avoids blank/broken substitutions.
         run: |
+          TAG="${{ env.RELEASE_TAG }}"
           BUILT_AT=$(date -u '+%Y-%m-%d %H:%M UTC')
+
+          # Build package-count table rows separately to avoid heredoc quoting issues
+          PKG_ROWS=""
+          for fw in react-vite nextjs vuejs-vite nuxt angular svelte remix astro gatsby nodejs-backend; do
+            DEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('dependencies',{})))" 2>/dev/null || echo '?')
+            DEVDEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('devDependencies',{})))" 2>/dev/null || echo '?')
+            TOTAL=$(( ${DEPS//\?/0} + ${DEVDEPS//\?/0} ))
+            PKG_ROWS="${PKG_ROWS}| $fw | $DEPS | $DEVDEPS | $TOTAL |\n"
+          done
+
+          FW_LIST=$(ls release/node_modules_by_framework/ | sed 's/^/  /')
+          PKG_LIST=$(find release/package_jsons -name "package.json" | sed 's|release/||' | sort | sed 's/^/  /')
+
           cat > release/MANIFEST.md << EOF
           # NPM Offline Package Collection
-          **Release:** ${{ env.RELEASE_TAG }}
+          **Release:** ${TAG}
           **Built:** ${BUILT_AT}
           **Node.js:** ${{ env.NODE_VERSION }}
 
@@ -392,19 +429,17 @@ jobs:
 
           \`\`\`
           node_modules_by_framework/
-          $(ls release/node_modules_by_framework/ | sed 's/^/  /')
+          ${FW_LIST}
 
           package_jsons/
-          $(find release/package_jsons -name "package.json" | sed 's|release/||' | sort | sed 's/^/  /')
+          ${PKG_LIST}
           \`\`\`
 
           ## Package counts
-          $(for fw in react-vite nextjs vuejs-vite nuxt angular svelte remix astro gatsby nodejs-backend; do
-            DEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('dependencies',{})))" 2>/dev/null || echo '?')
-            DEVDEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('devDependencies',{})))" 2>/dev/null || echo '?')
-            TOTAL=$((DEPS + DEVDEPS))
-            echo "| $fw | $DEPS | $DEVDEPS | $TOTAL |"
-          done)
+
+          | Framework | deps | devDeps | total |
+          |-----------|------|---------|-------|
+          $(printf "$PKG_ROWS")
 
           ## Usage
 
@@ -421,19 +456,17 @@ jobs:
 
       - name: Create cumulative tarball
         run: |
-          echo "Building cumulative tarball..."
           TAG="${{ env.RELEASE_TAG }}"
+          echo "Building cumulative tarball..."
           cd release
           tar -czf "../npm-offline-all-frameworks-${TAG}.tar.gz" .
           cd ..
           FULL_SIZE=$(du -sh "npm-offline-all-frameworks-${TAG}.tar.gz" | cut -f1)
           echo "📦 Cumulative tarball: npm-offline-all-frameworks-${TAG}.tar.gz (${FULL_SIZE})"
-
-          # Also log individual sizes
           echo ""
           echo "Individual framework sizes:"
           for f in release/node_modules_by_framework/*.tar.gz; do
-            echo "  $(du -sh $f | cut -f1)  $(basename $f)"
+            echo "  $(du -sh "$f" | cut -f1)  $(basename "$f")"
           done
 
       - name: Generate release notes
@@ -446,7 +479,7 @@ jobs:
           cat > release_notes.md << EOF
           ## 📦 NPM Offline Package Collection ${TAG}
 
-          Pre-downloaded \`node_modules\` for **11 web development framework** configurations.
+          Pre-downloaded \`node_modules\` for **10 web development framework** configurations.
           Built on: ${BUILT_AT} | Commit: \`${COMMIT_SHA}\` | Node.js: ${{ env.NODE_VERSION }}
 
           > ${COMMIT_MSG}
@@ -503,8 +536,10 @@ jobs:
           **Requirements:** Node.js >= 24.11.1 · npm >= 10 · tar (built into Win10+)
           EOF
 
-      - name: Delete existing release if updating latest
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      # FIX: broaden the condition to also cover workflow_dispatch (non-versioned runs),
+      # not just non-tag pushes — both cases should overwrite the rolling release.
+      - name: Delete existing release if updating rolling release
+        if: env.IS_VERSIONED == 'false'
         run: |
           TAG="${{ env.RELEASE_TAG }}"
           gh release delete "$TAG" --yes 2>/dev/null || true
@@ -519,8 +554,10 @@ jobs:
           name: '📦 NPM Offline Packages ${{ env.RELEASE_TAG }}'
           body_path: release_notes.md
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          make_latest: ${{ startsWith(github.ref, 'refs/tags/') }}
+          prerelease: ${{ env.IS_VERSIONED == 'false' }}
+          # FIX: make_latest must be the string "true" or "false" — boolean
+          # expressions aren't supported here; use the output string directly.
+          make_latest: ${{ env.IS_VERSIONED }}
           files: |
             npm-offline-all-frameworks-${{ env.RELEASE_TAG }}.tar.gz
             release/node_modules_by_framework/react-vite-node_modules.tar.gz
