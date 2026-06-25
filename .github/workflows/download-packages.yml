@@ -31,7 +31,7 @@ on:
       node_version:
         description: 'Node.js version to use'
         required: false
-        default: '20'
+        default: '24.11.1'
 
 permissions:
   contents: write
@@ -42,7 +42,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: ${{ github.event.inputs.node_version || '20' }}
+  NODE_VERSION: ${{ github.event.inputs.node_version || '24.11.1' }}
 
 jobs:
   # ────────────────────────────────────────────────────────────────────────────
@@ -500,7 +500,7 @@ jobs:
           Packages like \`sharp\`, \`argon2\`, \`better-sqlite3\`, \`serialport\` are compiled
           for Linux (Ubuntu). On Windows, run \`npm rebuild\` after extracting.
 
-          **Requirements:** Node.js >= 20 · npm >= 10 · tar (built into Win10+)
+          **Requirements:** Node.js >= 24.11.1 · npm >= 10 · tar (built into Win10+)
           EOF
 
       - name: Delete existing release if updating latest
