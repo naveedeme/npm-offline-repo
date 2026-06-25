@@ -394,77 +394,9 @@ jobs:
             cp "packages/$fw/package.json" "release/package_jsons/$fw/"
           done
 
-          cp scripts/install-offline.sh release/
-          cp scripts/install-offline.ps1 release/
-          cp README.md release/
-          chmod +x release/install-offline.sh
-
-      - name: Generate MANIFEST
-        # FIX: use quoted `<< 'EOF'` so the inner $(...) subshells run at
-        # execution time inside the heredoc, not at parse time by the shell
-        # layer that handles unquoted EOF — avoids blank/broken substitutions.
+      - name: Log individual framework sizes
         run: |
-          TAG="${{ env.RELEASE_TAG }}"
-          BUILT_AT=$(date -u '+%Y-%m-%d %H:%M UTC')
-
-          # Build package-count table rows separately to avoid heredoc quoting issues
-          PKG_ROWS=""
-          for fw in react-vite nextjs vuejs-vite nuxt angular svelte remix astro gatsby nodejs-backend; do
-            DEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('dependencies',{})))" 2>/dev/null || echo '?')
-            DEVDEPS=$(python3 -c "import json; p=json.load(open('packages/$fw/package.json')); print(len(p.get('devDependencies',{})))" 2>/dev/null || echo '?')
-            TOTAL=$(( ${DEPS//\?/0} + ${DEVDEPS//\?/0} ))
-            PKG_ROWS="${PKG_ROWS}| $fw | $DEPS | $DEVDEPS | $TOTAL |\n"
-          done
-
-          FW_LIST=$(ls release/node_modules_by_framework/ | sed 's/^/  /')
-          PKG_LIST=$(find release/package_jsons -name "package.json" | sed 's|release/||' | sort | sed 's/^/  /')
-
-          cat > release/MANIFEST.md << EOF
-          # NPM Offline Package Collection
-          **Release:** ${TAG}
-          **Built:** ${BUILT_AT}
-          **Node.js:** ${{ env.NODE_VERSION }}
-
-          ## Files
-
-          \`\`\`
-          node_modules_by_framework/
-          ${FW_LIST}
-
-          package_jsons/
-          ${PKG_LIST}
-          \`\`\`
-
-          ## Package counts
-
-          | Framework | deps | devDeps | total |
-          |-----------|------|---------|-------|
-          $(printf "$PKG_ROWS")
-
-          ## Usage
-
-          \`\`\`bash
-          # Linux/macOS
-          tar -xzf react-vite-node_modules.tar.gz -C /your/project/
-          # or
-          ./install-offline.sh react-vite /your/project
-
-          # Windows
-          .\\install-offline.ps1 -Framework react-vite -TargetPath C:\\your\\project
-          \`\`\`
-          EOF
-
-      - name: Create cumulative tarball
-        run: |
-          TAG="${{ env.RELEASE_TAG }}"
-          echo "Building cumulative tarball..."
-          cd release
-          tar -czf "../npm-offline-all-frameworks-${TAG}.tar.gz" .
-          cd ..
-          FULL_SIZE=$(du -sh "npm-offline-all-frameworks-${TAG}.tar.gz" | cut -f1)
-          echo "📦 Cumulative tarball: npm-offline-all-frameworks-${TAG}.tar.gz (${FULL_SIZE})"
-          echo ""
-          echo "Individual framework sizes:"
+          echo "Individual framework tarball sizes:"
           for f in release/node_modules_by_framework/*.tar.gz; do
             echo "  $(du -sh "$f" | cut -f1)  $(basename "$f")"
           done
@@ -488,9 +420,10 @@ jobs:
 
           ### 🗂 Downloads
 
+          Download only the framework(s) you need — each asset is independent.
+
           | Asset | Framework | Description |
           |-------|-----------|-------------|
-          | \`npm-offline-all-frameworks-${TAG}.tar.gz\` | **ALL** | Every framework in one bundle |
           | \`react-vite-node_modules.tar.gz\` | React + Vite | Full React 18 ecosystem |
           | \`nextjs-node_modules.tar.gz\` | Next.js 14 | App Router, Auth.js, SEO |
           | \`vuejs-vite-node_modules.tar.gz\` | Vue 3 + Vite | Vuetify, Element Plus, Pinia |
@@ -508,23 +441,13 @@ jobs:
 
           **Linux / macOS:**
           \`\`\`bash
-          # Single framework
+          # Extract directly into your project
           tar -xzf react-vite-node_modules.tar.gz -C /path/to/project/
-
-          # Using install script (inside cumulative tarball)
-          tar -xzf npm-offline-all-frameworks-${TAG}.tar.gz
-          chmod +x install-offline.sh
-          ./install-offline.sh react-vite /path/to/project
-          # or all frameworks:
-          ./install-offline.sh all /path/to/projects/
           \`\`\`
 
           **Windows (PowerShell):**
           \`\`\`powershell
-          # Extract cumulative tarball first, then:
-          .\\install-offline.ps1 -Framework react-vite -TargetPath C:\\path\\to\\project
-          # or all:
-          .\\install-offline.ps1 -Framework all -TargetPath C:\\projects
+          tar -xzf react-vite-node_modules.tar.gz -C C:\\path\\to\\project
           \`\`\`
 
           ---
@@ -559,7 +482,6 @@ jobs:
           # expressions aren't supported here; use the output string directly.
           make_latest: ${{ env.IS_VERSIONED }}
           files: |
-            npm-offline-all-frameworks-${{ env.RELEASE_TAG }}.tar.gz
             release/node_modules_by_framework/react-vite-node_modules.tar.gz
             release/node_modules_by_framework/nextjs-node_modules.tar.gz
             release/node_modules_by_framework/vuejs-vite-node_modules.tar.gz
@@ -587,6 +509,3 @@ jobs:
             NAME=$(basename "$f" "-node_modules.tar.gz")
             echo "| $NAME | $SIZE |" >> $GITHUB_STEP_SUMMARY
           done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          TOTAL=$(du -sh "npm-offline-all-frameworks-${TAG}.tar.gz" | cut -f1)
-          echo "**Cumulative bundle:** \`npm-offline-all-frameworks-${TAG}.tar.gz\` (${TOTAL})" >> $GITHUB_STEP_SUMMARY
