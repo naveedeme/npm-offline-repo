@@ -17,10 +17,13 @@ REGISTRY_HOST="${REGISTRY_HOST:-127.0.0.1}"
 REGISTRY_LISTEN="${REGISTRY_LISTEN:-${REGISTRY_HOST}:${REGISTRY_PORT}}"
 REGISTRY_URL="${REGISTRY_URL:-http://${REGISTRY_HOST}:${REGISTRY_PORT}}"
 NODE_VERSION_REQUIRED="${NODE_VERSION_REQUIRED:-}"
+BUILD_VARIANT="${BUILD_VARIANT:-unknown-linux}"
 NPM_CACHE_DIR="${BUILD_DIR}/npm-cache"
 VERDACCIO_STORAGE_DIR="${BUILD_DIR}/verdaccio/storage"
 PACKAGE_SETS_DIR="${BUILD_DIR}/package-sets"
 NODE_MODULES_DIR="${BUILD_DIR}/node_modules_by_framework"
+NODE_RUNTIME_DIR="${BUILD_DIR}/runtimes/node"
+NVM_RUNTIME_DIR="${BUILD_DIR}/runtimes/nvm"
 REPORTS_DIR="${BUILD_DIR}/reports"
 LOG_DIR="${BUILD_DIR}/logs"
 
@@ -44,13 +47,18 @@ if ! command -v tar >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v curl >/dev/null 2>&1; then
+  echo "Error: curl is required to download the Node.js runtime." >&2
+  exit 1
+fi
+
 if [ -n "$NODE_VERSION_REQUIRED" ] && [ "$(node -v)" != "$NODE_VERSION_REQUIRED" ]; then
   echo "Error: expected Node.js ${NODE_VERSION_REQUIRED}, found $(node -v)." >&2
   exit 1
 fi
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$NPM_CACHE_DIR" "$VERDACCIO_STORAGE_DIR" "$PACKAGE_SETS_DIR" "$NODE_MODULES_DIR" "$REPORTS_DIR" "$LOG_DIR"
+mkdir -p "$NPM_CACHE_DIR" "$VERDACCIO_STORAGE_DIR" "$PACKAGE_SETS_DIR" "$NODE_MODULES_DIR" "$NODE_RUNTIME_DIR" "$NVM_RUNTIME_DIR" "$REPORTS_DIR" "$LOG_DIR"
 
 ONLINE_CONFIG="${BUILD_DIR}/verdaccio-online.yaml"
 OFFLINE_CONFIG="${BUILD_DIR}/verdaccio-offline.yaml"
@@ -122,6 +130,34 @@ export PUPPETEER_SKIP_DOWNLOAD="${PUPPETEER_SKIP_DOWNLOAD:-1}"
 export CYPRESS_INSTALL_BINARY="${CYPRESS_INSTALL_BINARY:-0}"
 export ELECTRON_SKIP_BINARY_DOWNLOAD="${ELECTRON_SKIP_BINARY_DOWNLOAD:-1}"
 
+NODE_RUNTIME_VERSION="${NODE_RUNTIME_VERSION:-$(node -v | sed 's/^v//')}"
+NODE_RUNTIME_PLATFORM="${NODE_RUNTIME_PLATFORM:-linux}"
+NODE_RUNTIME_ARCH="${NODE_RUNTIME_ARCH:-$(node -p 'process.arch')}"
+NODE_RUNTIME_NAME="node-v${NODE_RUNTIME_VERSION}-${NODE_RUNTIME_PLATFORM}-${NODE_RUNTIME_ARCH}"
+NODE_RUNTIME_TARBALL="${NODE_RUNTIME_NAME}.tar.xz"
+NODE_DIST_URL="https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}"
+NVM_VERSION="${NVM_VERSION:-0.40.5}"
+NVM_TARBALL="nvm-v${NVM_VERSION}.tar.gz"
+
+echo "Downloading Node.js runtime ${NODE_RUNTIME_NAME}..."
+curl -fsSLo "${NODE_RUNTIME_DIR}/${NODE_RUNTIME_TARBALL}" "${NODE_DIST_URL}/${NODE_RUNTIME_TARBALL}"
+curl -fsSLo "${NODE_RUNTIME_DIR}/SHASUMS256.txt" "${NODE_DIST_URL}/SHASUMS256.txt"
+if command -v sha256sum >/dev/null 2>&1; then
+  (
+    cd "$NODE_RUNTIME_DIR"
+    grep " ${NODE_RUNTIME_TARBALL}$" SHASUMS256.txt | sha256sum -c -
+  )
+fi
+
+echo "Downloading nvm ${NVM_VERSION}..."
+curl -fsSLo "${NVM_RUNTIME_DIR}/${NVM_TARBALL}" "https://github.com/nvm-sh/nvm/archive/refs/tags/v${NVM_VERSION}.tar.gz"
+if command -v sha256sum >/dev/null 2>&1; then
+  (
+    cd "$NVM_RUNTIME_DIR"
+    sha256sum "$NVM_TARBALL" > SHASUMS256.txt
+  )
+fi
+
 npm cache add verdaccio@latest --registry "$REGISTRY_URL" --cache "$NPM_CACHE_DIR" \
   > "${LOG_DIR}/verdaccio-cache-add.log" 2>&1
 
@@ -130,8 +166,17 @@ printf '{\n' > "$MANIFEST"
 printf '  "builtAt": "%s",\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$MANIFEST"
 printf '  "node": "%s",\n' "$(node -v)" >> "$MANIFEST"
 printf '  "npm": "%s",\n' "$(npm -v)" >> "$MANIFEST"
+printf '  "buildVariant": "%s",\n' "$BUILD_VARIANT" >> "$MANIFEST"
+if [ -r /etc/os-release ]; then
+  os_pretty_name="$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-unknown}")"
+else
+  os_pretty_name="unknown"
+fi
+printf '  "os": "%s",\n' "$os_pretty_name" >> "$MANIFEST"
 printf '  "platform": "%s",\n' "$(node -p 'process.platform')" >> "$MANIFEST"
 printf '  "arch": "%s",\n' "$(node -p 'process.arch')" >> "$MANIFEST"
+printf '  "nodeRuntime": "%s",\n' "$NODE_RUNTIME_TARBALL" >> "$MANIFEST"
+printf '  "nvm": "%s",\n' "$NVM_VERSION" >> "$MANIFEST"
 printf '  "registry": "%s",\n' "$REGISTRY_URL" >> "$MANIFEST"
 printf '  "packageSets": [\n' >> "$MANIFEST"
 
@@ -197,13 +242,14 @@ printf '\n  ]\n' >> "$MANIFEST"
 printf '}\n' >> "$MANIFEST"
 
 cp "$OFFLINE_CONFIG" "${BUILD_DIR}/verdaccio/config.yaml"
+cp "${ROOT_DIR}/scripts/install-node-offline.sh" "${BUILD_DIR}/install-node-offline.sh"
 cp "${ROOT_DIR}/scripts/start-offline-registry.sh" "${BUILD_DIR}/start-offline-registry.sh"
 cp "${ROOT_DIR}/scripts/install-from-offline-repo.sh" "${BUILD_DIR}/install-from-offline-repo.sh"
 cp "${ROOT_DIR}/scripts/verify-offline-repo.sh" "${BUILD_DIR}/verify-offline-repo.sh"
 chmod +x "${BUILD_DIR}/"*.sh
 
 tar -czf "${ROOT_DIR}/artifacts/npm-offline-repository.tar.gz" -C "$BUILD_DIR" \
-  manifest.json npm-cache package-sets reports verdaccio start-offline-registry.sh install-from-offline-repo.sh verify-offline-repo.sh
+  manifest.json npm-cache package-sets reports runtimes verdaccio install-node-offline.sh start-offline-registry.sh install-from-offline-repo.sh verify-offline-repo.sh
 
 if command -v sha256sum >/dev/null 2>&1; then
   (

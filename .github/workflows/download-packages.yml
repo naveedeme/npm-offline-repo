@@ -17,7 +17,7 @@ on:
       node_version:
         description: 'Node.js version to use for the offline build'
         required: false
-        default: '24.11.1'
+        default: '24.18.0'
 
 permissions:
   contents: write
@@ -27,12 +27,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: ${{ github.event.inputs.node_version || '24.11.1' }}
+  NODE_VERSION: ${{ github.event.inputs.node_version || '24.18.0' }}
 
 jobs:
   resolve-tag:
     name: Resolve Release Tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       release_tag: ${{ steps.set-tag.outputs.tag }}
       is_versioned: ${{ steps.set-tag.outputs.is_versioned }}
@@ -62,12 +62,19 @@ jobs:
           echo "Resolved release tag: ${TAG} (versioned=${IS_VERSIONED})"
 
   build-offline-repository:
-    name: Build Offline Repository
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.variant }}
     needs: resolve-tag
-    env:
-      RELEASE_TAG: ${{ needs.resolve-tag.outputs.release_tag }}
-      IS_VERSIONED: ${{ needs.resolve-tag.outputs.is_versioned }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            variant: ubuntu-22.04
+          - runner: ubuntu-24.04
+            variant: ubuntu-24.04
+          - runner: ubuntu-26.04
+            variant: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,6 +90,7 @@ jobs:
           node -v
           npm -v
           uname -a
+          cat /etc/os-release
 
       - name: Install Verdaccio
         shell: bash
@@ -90,16 +98,59 @@ jobs:
 
       - name: Build registry, cache, lockfiles, and prebuilt modules
         shell: bash
+        env:
+          BUILD_VARIANT: ${{ matrix.variant }}
         run: bash scripts/build-offline-repository.sh
 
       - name: Verify offline install path
         shell: bash
         run: bash artifacts/offline-repository/verify-offline-repo.sh
 
-      - name: List release artifacts
+      - name: Prepare variant release files
         shell: bash
         run: |
-          find artifacts -maxdepth 3 -type f \( -name "*.tar.gz" -o -name "SHA256SUMS.txt" \) -exec du -h {} \; | sort -h
+          mkdir -p release-artifacts
+          cp artifacts/npm-offline-repository.tar.gz "release-artifacts/npm-offline-repository-${{ matrix.variant }}.tar.gz"
+          tar -czf "release-artifacts/node_modules_by_framework-${{ matrix.variant }}.tar.gz" \
+            -C artifacts/offline-repository node_modules_by_framework
+          (
+            cd release-artifacts
+            sha256sum "npm-offline-repository-${{ matrix.variant }}.tar.gz" \
+              "node_modules_by_framework-${{ matrix.variant }}.tar.gz" \
+              > "SHA256SUMS-${{ matrix.variant }}.txt"
+          )
+
+      - name: List variant artifacts
+        shell: bash
+        run: find release-artifacts -type f -exec du -h {} \; | sort -h
+
+      - name: Upload variant artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.variant }}
+          path: release-artifacts/*
+          retention-days: 1
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-24.04
+    needs:
+      - resolve-tag
+      - build-offline-repository
+    env:
+      RELEASE_TAG: ${{ needs.resolve-tag.outputs.release_tag }}
+      IS_VERSIONED: ${{ needs.resolve-tag.outputs.is_versioned }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download variant artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-artifacts
 
       - name: Generate release notes
         shell: bash
@@ -118,40 +169,35 @@ jobs:
 
           > ${COMMIT_MSG}
 
-          ### What to Download
+          ### Choose Your Ubuntu Variant
 
-          Download \`npm-offline-repository.tar.gz\` first. It contains:
+          Download the pair that matches the offline computer:
 
-          - Verdaccio offline registry storage
-          - npm cache fallback
-          - package.json and package-lock.json for every package set
-          - install and verification scripts
+          | Offline OS | Repository bundle | Prebuilt modules bundle |
+          |---|---|---|
+          | Ubuntu 22.04 | \`npm-offline-repository-ubuntu-22.04.tar.gz\` | \`node_modules_by_framework-ubuntu-22.04.tar.gz\` |
+          | Ubuntu 24.04 | \`npm-offline-repository-ubuntu-24.04.tar.gz\` | \`node_modules_by_framework-ubuntu-24.04.tar.gz\` |
+          | Ubuntu 26.04 | \`npm-offline-repository-ubuntu-26.04.tar.gz\` | \`node_modules_by_framework-ubuntu-26.04.tar.gz\` |
 
-          Also download any \`*-node_modules.tar.gz\` package sets you want prebuilt. Put them under:
-
-          \`\`\`bash
-          mkdir -p node_modules_by_framework
-          mv *-node_modules.tar.gz node_modules_by_framework/
-          \`\`\`
+          Each variant is built independently on its matching GitHub-hosted Ubuntu runner.
 
           ### Offline Usage
 
           \`\`\`bash
-          tar -xzf npm-offline-repository.tar.gz
+          tar -xzf npm-offline-repository-ubuntu-22.04.tar.gz
+          tar -xzf node_modules_by_framework-ubuntu-22.04.tar.gz
+          ./install-node-offline.sh
+          source ./node-env.sh
           npm install -g verdaccio --offline --cache ./npm-cache
           ./start-offline-registry.sh
           ./install-from-offline-repo.sh react-vite /home/user/myapp
           \`\`\`
 
-          For another computer on the LAN, set:
-
-          \`\`\`bash
-          npm set registry http://SERVER_IP:4873
-          \`\`\`
+          Replace \`ubuntu-22.04\` with \`ubuntu-24.04\` or \`ubuntu-26.04\` when using those machines.
 
           ### Native Package Note
 
-          The prebuilt \`node_modules\` tarballs are the safest option for packages with native binaries. If you run \`npm ci\` offline instead, keep Node.js, npm, Linux distribution, CPU architecture, and glibc compatible with this build.
+          The prebuilt \`node_modules\` tarballs are the safest option for packages with native binaries. If you run \`npm ci\` offline instead, keep Node.js, npm, Linux distribution, CPU architecture, and glibc compatible with the selected variant.
           EOF
 
       - name: Delete existing release if updating rolling release
@@ -173,16 +219,14 @@ jobs:
           prerelease: ${{ env.IS_VERSIONED == 'false' }}
           make_latest: ${{ env.IS_VERSIONED }}
           files: |
-            artifacts/npm-offline-repository.tar.gz
-            artifacts/SHA256SUMS.txt
-            artifacts/offline-repository/node_modules_by_framework/*.tar.gz
+            release-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         shell: bash
         run: |
-          echo "## Offline repository built" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Offline repository release" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Tag:** \`${{ env.RELEASE_TAG }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -191,4 +235,4 @@ jobs:
           while IFS= read -r file; do
             size=$(du -h "$file" | cut -f1)
             echo "| \`$(basename "$file")\` | ${size} |" >> "$GITHUB_STEP_SUMMARY"
-          done < <(find artifacts -maxdepth 3 -type f \( -name "*.tar.gz" -o -name "SHA256SUMS.txt" \) | sort)
+          done < <(find release-artifacts -type f | sort)

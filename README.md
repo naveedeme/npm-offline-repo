@@ -6,6 +6,7 @@ This project creates:
 
 - a Verdaccio registry storage bundle
 - a populated npm cache
+- `nvm` plus a Linux Node.js runtime tarball
 - exact `package-lock.json` files for each package set
 - optional prebuilt `node_modules` tarballs
 - install and verification scripts for the offline machine
@@ -36,7 +37,7 @@ npm install -g verdaccio@latest
 bash scripts/build-offline-repository.sh
 ```
 
-The output is written to:
+The local output is written to:
 
 ```text
 artifacts/
@@ -45,8 +46,12 @@ artifacts/
 └── offline-repository/
     ├── npm-cache/
     ├── package-sets/
+    ├── runtimes/
+    │   ├── node/
+    │   └── nvm/
     ├── node_modules_by_framework/
     ├── verdaccio/
+    ├── install-node-offline.sh
     ├── start-offline-registry.sh
     ├── install-from-offline-repo.sh
     └── verify-offline-repo.sh
@@ -62,20 +67,33 @@ For a USB drive or external disk, copy the full folder:
 artifacts/offline-repository/
 ```
 
-For GitHub Releases, download:
+For GitHub Releases, download the pair that matches the offline computer:
 
-- `npm-offline-repository.tar.gz`
-- `SHA256SUMS.txt`
-- any `*-node_modules.tar.gz` package sets you want prebuilt
+| Offline OS | Repository bundle | Prebuilt modules bundle |
+|---|---|---|
+| Ubuntu 22.04 | `npm-offline-repository-ubuntu-22.04.tar.gz` | `node_modules_by_framework-ubuntu-22.04.tar.gz` |
+| Ubuntu 24.04 | `npm-offline-repository-ubuntu-24.04.tar.gz` | `node_modules_by_framework-ubuntu-24.04.tar.gz` |
+| Ubuntu 26.04 | `npm-offline-repository-ubuntu-26.04.tar.gz` | `node_modules_by_framework-ubuntu-26.04.tar.gz` |
 
-If you download prebuilt package tarballs separately, place them here after extracting `npm-offline-repository.tar.gz`:
+Each variant is built independently on its matching GitHub-hosted Ubuntu runner. Ubuntu 26.04 is currently a GitHub public preview runner image.
+
+Extract both tarballs in the same directory:
 
 ```bash
-mkdir -p node_modules_by_framework
-mv *-node_modules.tar.gz node_modules_by_framework/
+tar -xzf npm-offline-repository-ubuntu-22.04.tar.gz
+tar -xzf node_modules_by_framework-ubuntu-22.04.tar.gz
 ```
 
+Replace `ubuntu-22.04` with `ubuntu-24.04` or `ubuntu-26.04` for those machines.
+
 ## Use on the Offline Linux Computer
+
+Install the bundled `nvm`, Node.js, and npm:
+
+```bash
+./install-node-offline.sh
+source ./node-env.sh
+```
 
 Install Verdaccio from the bundled npm cache:
 
@@ -136,18 +154,22 @@ For the most reliable result, keep these the same between the online build machi
 
 - Linux distribution and version
 - CPU architecture, for example x64
-- Node.js version
-- npm version
+- Node.js version, provided in `runtimes/node/` and installed through `nvm`
+- npm version, included with the bundled Node.js runtime
 - glibc version
 
 The prebuilt `node_modules` tarballs are included for this reason. They avoid most offline rebuild problems when the target Linux environment matches the build environment.
 
 ## GitHub Release Workflow
 
-The workflow at `.github/workflows/download-packages.yml` builds:
+The workflow at `.github/workflows/download-packages.yml` builds three independent variants in one release:
 
-- `npm-offline-repository.tar.gz`
-- one prebuilt `node_modules` tarball per package set
-- `SHA256SUMS.txt`
+- `npm-offline-repository-ubuntu-22.04.tar.gz`
+- `npm-offline-repository-ubuntu-24.04.tar.gz`
+- `npm-offline-repository-ubuntu-26.04.tar.gz`
+- `node_modules_by_framework-ubuntu-22.04.tar.gz`
+- `node_modules_by_framework-ubuntu-24.04.tar.gz`
+- `node_modules_by_framework-ubuntu-26.04.tar.gz`
+- one `SHA256SUMS-<variant>.txt` file per variant
 
-Manual runs let you choose the Node.js version and release tag. Pushes to `main` or `master` create a dated prerelease tag. Version tags like `v1.2.0` create versioned releases.
+Manual runs let you choose the Node.js version and release tag. The selected Node.js version is downloaded into `runtimes/node/`, and `nvm` is downloaded into `runtimes/nvm/`. Pushes to `main` or `master` create a dated prerelease tag. Version tags like `v1.2.0` create versioned releases.

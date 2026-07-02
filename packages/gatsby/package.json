@@ -1,7 +1,7 @@
 {
   "name": "gatsby-app",
   "version": "1.0.0",
-  "description": "Gatsby 5 + TypeScript \u2014 comprehensive package set",
+  "description": "Gatsby 5 + TypeScript — comprehensive package set",
   "private": true,
   "scripts": {
     "develop": "gatsby develop",
@@ -18,10 +18,10 @@
     "prepare": "husky install"
   },
   "dependencies": {
-    "gatsby": "^5.13.7",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-is": "^18.3.1",
+    "gatsby": "^5.16.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-is": "^19.2.7",
     "gatsby-plugin-typescript": "^5.13.1",
     "gatsby-plugin-image": "^3.13.1",
     "gatsby-plugin-sharp": "^5.13.1",
@@ -179,7 +179,7 @@
     "@hapi/boom": "^10.0.1",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "argon2": "^0.41.1",
+    "argon2": "^0.44.0",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "passport-jwt": "^4.0.1",
@@ -190,8 +190,8 @@
     "jose": "^5.9.4",
     "jwks-rsa": "^3.1.0",
     "better-auth": "^1.1.6",
-    "prisma": "^5.20.0",
-    "@prisma/client": "^5.20.0",
+    "prisma": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "typeorm": "^0.3.20",
     "sequelize": "^6.37.4",
     "sequelize-typescript": "^2.1.6",
@@ -211,8 +211,8 @@
     "mongoose": "^8.7.0",
     "redis": "^4.7.0",
     "ioredis": "^5.4.1",
-    "sqlite3": "^5.1.7",
-    "better-sqlite3": "^11.3.0",
+    "sqlite3": "^6.0.1",
+    "better-sqlite3": "^12.11.1",
     "mongodb": "^6.9.0",
     "@elastic/elasticsearch": "^8.15.0",
     "tedious": "^18.6.1",
@@ -234,7 +234,7 @@
     "@langchain/openai": "^0.3.11",
     "@langchain/anthropic": "^0.3.5",
     "multer": "^1.4.5-lts.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "jimp": "^1.6.0",
     "archiver": "^7.0.1",
     "jszip": "^3.10.1",
@@ -276,10 +276,10 @@
     "node-cache": "^5.1.2",
     "lru-cache": "^11.0.1",
     "cache-manager": "^5.7.6",
-    "keyv": "^5.1.0",
-    "@keyv/redis": "^4.2.0",
+    "keyv": "^5.6.0",
+    "@keyv/redis": "^5.1.6",
     "@keyv/postgres": "^2.2.3",
-    "@keyv/sqlite": "^4.0.0",
+    "@keyv/sqlite": "^4.0.8",
     "helmet": "^8.0.0",
     "cors": "^2.8.5",
     "express-rate-limit": "^7.4.1",
@@ -406,14 +406,14 @@
     "@syncfusion/ej2-icons": "^27.1.48"
   },
   "devDependencies": {
-    "typescript": "^5.5.3",
-    "tsx": "^4.19.1",
+    "typescript": "^6.0.3",
+    "tsx": "^4.22.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "tsup": "^8.3.0",
+    "tsup": "^8.5.1",
     "tsc-alias": "^1.8.10",
     "tsconfig-paths": "^4.2.0",
-    "@swc/core": "^1.7.35",
+    "@swc/core": "^1.15.43",
     "@swc/cli": "^0.4.0",
     "@swc/jest": "^0.2.37",
     "@babel/core": "^7.25.8",
@@ -424,9 +424,9 @@
     "@babel/runtime": "^7.25.7",
     "babel-jest": "^29.7.0",
     "babel-plugin-module-resolver": "^5.0.2",
-    "vitest": "^2.1.1",
-    "@vitest/ui": "^2.1.1",
-    "@vitest/coverage-v8": "^2.1.1",
+    "vitest": "^4.1.9",
+    "@vitest/ui": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.9",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "jest-extended": "^4.0.2",
@@ -438,8 +438,8 @@
     "supertest": "^7.0.0",
     "msw": "^2.4.10",
     "nock": "^13.5.5",
-    "@playwright/test": "^1.47.2",
-    "cypress": "^13.15.0",
+    "@playwright/test": "^1.61.1",
+    "cypress": "^15.18.0",
     "@faker-js/faker": "^9.1.0",
     "sinon": "^19.0.2",
     "chance": "^1.1.12",
@@ -452,7 +452,7 @@
     "@testing-library/user-event": "^14.5.2",
     "@testing-library/react-hooks": "^8.0.1",
     "@cypress/react": "^8.0.2",
-    "eslint": "^9.11.1",
+    "eslint": "^10.6.0",
     "@eslint/js": "^9.11.1",
     "typescript-eslint": "^8.7.0",
     "eslint-plugin-import": "^2.31.0",
@@ -468,15 +468,15 @@
     "eslint-plugin-react-refresh": "^0.4.12",
     "eslint-plugin-jsx-a11y": "^6.10.0",
     "eslint-import-resolver-typescript": "^3.6.3",
-    "prettier": "^3.3.3",
+    "prettier": "^3.9.4",
     "prettier-plugin-organize-imports": "^4.1.0",
     "prettier-plugin-packagejson": "^2.5.3",
     "prettier-plugin-tailwindcss": "^0.6.8",
     "prettier-plugin-prisma": "^5.0.0",
     "prettier-plugin-sql": "^0.18.1",
-    "tailwindcss": "^3.4.13",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
+    "tailwindcss": "^4.3.2",
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.16",
     "postcss-import": "^16.1.0",
     "postcss-preset-env": "^10.0.5",
     "@tailwindcss/forms": "^0.5.9",
@@ -527,8 +527,8 @@
     "@storybook/addon-viewport": "^8.6.18",
     "@storybook/blocks": "^8.6.18",
     "@storybook/test": "^8.6.18",
-    "@types/react": "^18.3.10",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@types/lodash": "^4.17.9",
     "@types/d3": "^7.4.3",
     "@types/uuid": "^10.0.0",
@@ -541,7 +541,7 @@
     "@types/dompurify": "^3.0.5",
     "@types/file-saver": "^2.0.7",
     "@types/leaflet": "^1.9.12",
-    "@types/node": "^22.7.4",
+    "@types/node": "^24.13.2",
     "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
     "@types/morgan": "^1.9.9",
@@ -575,7 +575,7 @@
     "@types/react-helmet": "^6.1.11",
     "@types/three": "^0.168.0",
     "@types/howler": "^2.2.11",
-    "webpack": "^5.95.0",
+    "webpack": "^5.108.3",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.1.0",
     "html-webpack-plugin": "^5.6.3",
@@ -596,28 +596,29 @@
     "url-loader": "^4.1.1",
     "sass-loader": "^16.0.2",
     "postcss-loader": "^8.1.1",
-    "less-loader": "^12.2.0"
+    "less-loader": "^12.2.0",
+    "@tailwindcss/postcss": "^4.3.2"
   },
   "overrides": {
     "react-beautiful-dnd": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "react-final-form": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "formik": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "react-big-calendar": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "react-konva": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "apollo-server-express": {
       "graphql": "^16.9.0"
@@ -626,20 +627,20 @@
       "graphql": "^16.9.0"
     },
     "react-leaflet": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "@react-three/fiber": {
-      "react": "^18.3.1",
-      "react-dom": "^18.3.1"
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
     },
     "@react-three/drei": {
-      "react": "^18.3.1"
+      "react": "^19.2.7"
     }
   },
   "resolutions": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "graphql": "^16.9.0"
   },
   "engines": {
