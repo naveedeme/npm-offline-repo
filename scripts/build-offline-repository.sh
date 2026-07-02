@@ -230,12 +230,17 @@ NODE
   cp "$work_dir/package-lock.json" "$set_out/package-lock.json"
   tar -czf "${NODE_MODULES_DIR}/${set_name}-node_modules.tar.gz" -C "$work_dir" node_modules
 
-  dep_count="$(node -e "const lock=require(process.argv[1]); console.log(Object.keys(lock.packages || {}).length)" "$work_dir/package-lock.json")"
+  dep_count="$(node -e "const lock=require(process.argv[1]); console.log(Object.keys(lock.packages || {}).length)" "$set_out/package-lock.json")"
   if [ "$FIRST_SET" = false ]; then
     printf ',\n' >> "$MANIFEST"
   fi
   FIRST_SET=false
   printf '    {"name": "%s", "lockfilePackages": %s}' "$set_name" "$dep_count" >> "$MANIFEST"
+
+  rm -rf "$work_dir"
+  if command -v df >/dev/null 2>&1; then
+    df -h "$BUILD_DIR"
+  fi
 done
 
 printf '\n  ]\n' >> "$MANIFEST"
@@ -243,13 +248,14 @@ printf '}\n' >> "$MANIFEST"
 
 cp "$OFFLINE_CONFIG" "${BUILD_DIR}/verdaccio/config.yaml"
 cp "${ROOT_DIR}/scripts/install-node-offline.sh" "${BUILD_DIR}/install-node-offline.sh"
+cp "${ROOT_DIR}/scripts/install-framework-offline.sh" "${BUILD_DIR}/install-framework-offline.sh"
 cp "${ROOT_DIR}/scripts/start-offline-registry.sh" "${BUILD_DIR}/start-offline-registry.sh"
 cp "${ROOT_DIR}/scripts/install-from-offline-repo.sh" "${BUILD_DIR}/install-from-offline-repo.sh"
 cp "${ROOT_DIR}/scripts/verify-offline-repo.sh" "${BUILD_DIR}/verify-offline-repo.sh"
 chmod +x "${BUILD_DIR}/"*.sh
 
 tar -czf "${ROOT_DIR}/artifacts/npm-offline-repository.tar.gz" -C "$BUILD_DIR" \
-  manifest.json npm-cache package-sets reports runtimes verdaccio install-node-offline.sh start-offline-registry.sh install-from-offline-repo.sh verify-offline-repo.sh
+  manifest.json npm-cache package-sets reports runtimes verdaccio install-node-offline.sh install-framework-offline.sh start-offline-registry.sh install-from-offline-repo.sh verify-offline-repo.sh
 
 if command -v sha256sum >/dev/null 2>&1; then
   (

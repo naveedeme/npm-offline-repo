@@ -80,6 +80,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          sudo apt-get clean
+          df -h
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -111,13 +119,23 @@ jobs:
         run: |
           mkdir -p release-artifacts
           cp artifacts/npm-offline-repository.tar.gz "release-artifacts/npm-offline-repository-${{ matrix.variant }}.tar.gz"
-          tar -czf "release-artifacts/node_modules_by_framework-${{ matrix.variant }}.tar.gz" \
-            -C artifacts/offline-repository node_modules_by_framework
+          cp scripts/install-framework-offline.sh release-artifacts/install-framework-offline.sh
+          for package_tarball in artifacts/offline-repository/node_modules_by_framework/*-node_modules.tar.gz; do
+            name="$(basename "$package_tarball" .tar.gz)"
+            cp "$package_tarball" "release-artifacts/${name}-${{ matrix.variant }}.tar.gz"
+          done
           (
             cd release-artifacts
-            sha256sum "npm-offline-repository-${{ matrix.variant }}.tar.gz" \
-              "node_modules_by_framework-${{ matrix.variant }}.tar.gz" \
-              > "SHA256SUMS-${{ matrix.variant }}.txt"
+            sha256sum *.tar.gz > "SHA256SUMS-${{ matrix.variant }}.txt"
+            for file in *.tar.gz; do
+              if [ "$(stat -c%s "$file")" -gt 1900000000 ]; then
+                split -b 1900M "$file" "${file}.part-"
+                rm "$file"
+              fi
+            done
+            if compgen -G "*.part-*" > /dev/null; then
+              sha256sum *.part-* > "SHA256SUMS-${{ matrix.variant }}-parts.txt"
+            fi
           )
 
       - name: List variant artifacts
@@ -128,7 +146,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.variant }}
-          path: release-artifacts/*
+          path: |
+            release-artifacts/*
+            !release-artifacts/install-framework-offline.sh
           retention-days: 1
 
   create-release:
@@ -152,6 +172,10 @@ jobs:
           merge-multiple: true
           path: release-artifacts
 
+      - name: Add standalone installer
+        shell: bash
+        run: cp scripts/install-framework-offline.sh release-artifacts/install-framework-offline.sh
+
       - name: Generate release notes
         shell: bash
         run: |
@@ -171,21 +195,37 @@ jobs:
 
           ### Choose Your Ubuntu Variant
 
-          Download the pair that matches the offline computer:
+          Download the repository bundle that matches the offline computer, plus any framework \`*-node_modules-<variant>.tar.gz\` files you want prebuilt:
 
-          | Offline OS | Repository bundle | Prebuilt modules bundle |
+          | Offline OS | Repository bundle | Example prebuilt module asset |
           |---|---|---|
-          | Ubuntu 22.04 | \`npm-offline-repository-ubuntu-22.04.tar.gz\` | \`node_modules_by_framework-ubuntu-22.04.tar.gz\` |
-          | Ubuntu 24.04 | \`npm-offline-repository-ubuntu-24.04.tar.gz\` | \`node_modules_by_framework-ubuntu-24.04.tar.gz\` |
-          | Ubuntu 26.04 | \`npm-offline-repository-ubuntu-26.04.tar.gz\` | \`node_modules_by_framework-ubuntu-26.04.tar.gz\` |
+          | Ubuntu 22.04 | \`npm-offline-repository-ubuntu-22.04.tar.gz\` | \`react-vite-node_modules-ubuntu-22.04.tar.gz\` |
+          | Ubuntu 24.04 | \`npm-offline-repository-ubuntu-24.04.tar.gz\` | \`react-vite-node_modules-ubuntu-24.04.tar.gz\` |
+          | Ubuntu 26.04 | \`npm-offline-repository-ubuntu-26.04.tar.gz\` | \`react-vite-node_modules-ubuntu-26.04.tar.gz\` |
 
           Each variant is built independently on its matching GitHub-hosted Ubuntu runner.
 
           ### Offline Usage
 
+          Put the repository tarball and the desired framework tarball in the same directory, then run:
+
+          \`\`\`bash
+          chmod +x install-framework-offline.sh
+          ./install-framework-offline.sh ubuntu-22.04 react-vite /home/user/myapp
+          \`\`\`
+
+          The script extracts the repository, reassembles split assets when needed, installs Node.js/npm through nvm, installs Verdaccio, starts the offline registry, and installs the selected package set.
+
+          Manual equivalent:
+
           \`\`\`bash
           tar -xzf npm-offline-repository-ubuntu-22.04.tar.gz
-          tar -xzf node_modules_by_framework-ubuntu-22.04.tar.gz
+          mkdir -p node_modules_by_framework
+          mv *-node_modules-ubuntu-22.04.tar.gz node_modules_by_framework/
+          for f in node_modules_by_framework/*-node_modules-ubuntu-22.04.tar.gz; do
+            base="\$(basename "\$f" -ubuntu-22.04.tar.gz)"
+            mv "\$f" "node_modules_by_framework/\${base}.tar.gz"
+          done
           ./install-node-offline.sh
           source ./node-env.sh
           npm install -g verdaccio --offline --cache ./npm-cache

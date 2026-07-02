@@ -52,6 +52,7 @@ artifacts/
     ├── node_modules_by_framework/
     ├── verdaccio/
     ├── install-node-offline.sh
+    ├── install-framework-offline.sh
     ├── start-offline-registry.sh
     ├── install-from-offline-repo.sh
     └── verify-offline-repo.sh
@@ -67,28 +68,53 @@ For a USB drive or external disk, copy the full folder:
 artifacts/offline-repository/
 ```
 
-For GitHub Releases, download the pair that matches the offline computer:
+For GitHub Releases, download the repository bundle that matches the offline computer, plus any prebuilt framework tarballs you want:
 
-| Offline OS | Repository bundle | Prebuilt modules bundle |
+| Offline OS | Repository bundle | Example prebuilt framework tarball |
 |---|---|---|
-| Ubuntu 22.04 | `npm-offline-repository-ubuntu-22.04.tar.gz` | `node_modules_by_framework-ubuntu-22.04.tar.gz` |
-| Ubuntu 24.04 | `npm-offline-repository-ubuntu-24.04.tar.gz` | `node_modules_by_framework-ubuntu-24.04.tar.gz` |
-| Ubuntu 26.04 | `npm-offline-repository-ubuntu-26.04.tar.gz` | `node_modules_by_framework-ubuntu-26.04.tar.gz` |
+| Ubuntu 22.04 | `npm-offline-repository-ubuntu-22.04.tar.gz` | `react-vite-node_modules-ubuntu-22.04.tar.gz` |
+| Ubuntu 24.04 | `npm-offline-repository-ubuntu-24.04.tar.gz` | `react-vite-node_modules-ubuntu-24.04.tar.gz` |
+| Ubuntu 26.04 | `npm-offline-repository-ubuntu-26.04.tar.gz` | `react-vite-node_modules-ubuntu-26.04.tar.gz` |
 
 Each variant is built independently on its matching GitHub-hosted Ubuntu runner. Ubuntu 26.04 is currently a GitHub public preview runner image.
 
-Extract both tarballs in the same directory:
+Also download the small standalone installer:
+
+```text
+install-framework-offline.sh
+```
+
+Copy the installer, repository bundle, and package-set tarball into the same directory, then run:
+
+```bash
+chmod +x install-framework-offline.sh
+./install-framework-offline.sh ubuntu-22.04 react-vite /home/user/my-react-app
+```
+
+Replace `ubuntu-22.04` and `react-vite` with the variant and package set you downloaded. The script extracts the repository bundle, reassembles split assets when needed, installs Node.js/npm through `nvm`, installs Verdaccio, starts the offline registry, and installs the selected package set.
+
+If you want to do the steps manually, extract the repository bundle, then place any downloaded framework tarballs under `node_modules_by_framework/` using the installer’s expected names.
+
+```bash
+cat npm-offline-repository-ubuntu-22.04.tar.gz.part-* > npm-offline-repository-ubuntu-22.04.tar.gz
+cat react-vite-node_modules-ubuntu-22.04.tar.gz.part-* > react-vite-node_modules-ubuntu-22.04.tar.gz
+```
 
 ```bash
 tar -xzf npm-offline-repository-ubuntu-22.04.tar.gz
-tar -xzf node_modules_by_framework-ubuntu-22.04.tar.gz
+mkdir -p node_modules_by_framework
+mv *-node_modules-ubuntu-22.04.tar.gz node_modules_by_framework/
+for f in node_modules_by_framework/*-node_modules-ubuntu-22.04.tar.gz; do
+  base="$(basename "$f" -ubuntu-22.04.tar.gz)"
+  mv "$f" "node_modules_by_framework/${base}.tar.gz"
+done
 ```
 
 Replace `ubuntu-22.04` with `ubuntu-24.04` or `ubuntu-26.04` for those machines.
 
 ## Use on the Offline Linux Computer
 
-Install the bundled `nvm`, Node.js, and npm:
+The automated installer above handles this section. For manual setup, install the bundled `nvm`, Node.js, and npm:
 
 ```bash
 ./install-node-offline.sh
@@ -167,9 +193,10 @@ The workflow at `.github/workflows/download-packages.yml` builds three independe
 - `npm-offline-repository-ubuntu-22.04.tar.gz`
 - `npm-offline-repository-ubuntu-24.04.tar.gz`
 - `npm-offline-repository-ubuntu-26.04.tar.gz`
-- `node_modules_by_framework-ubuntu-22.04.tar.gz`
-- `node_modules_by_framework-ubuntu-24.04.tar.gz`
-- `node_modules_by_framework-ubuntu-26.04.tar.gz`
+- one `*-node_modules-ubuntu-22.04.tar.gz` asset per package set
+- one `*-node_modules-ubuntu-24.04.tar.gz` asset per package set
+- one `*-node_modules-ubuntu-26.04.tar.gz` asset per package set
 - one `SHA256SUMS-<variant>.txt` file per variant
+- `install-framework-offline.sh`
 
 Manual runs let you choose the Node.js version and release tag. The selected Node.js version is downloaded into `runtimes/node/`, and `nvm` is downloaded into `runtimes/nvm/`. Pushes to `main` or `master` create a dated prerelease tag. Version tags like `v1.2.0` create versioned releases.
