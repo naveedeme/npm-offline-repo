@@ -3,7 +3,7 @@
 # Extracts a framework's node_modules into your project directory (Windows)
 #
 # Usage:
-#   .\install-offline.ps1 -Framework typescript-vite -TargetPath C:\myapp
+#   .\install-offline.ps1 -Framework react-vite -TargetPath C:\myapp
 #   .\install-offline.ps1 -Framework all -TargetPath C:\projects
 #
 # Frameworks:
@@ -58,7 +58,7 @@ function Write-Usage {
     Write-Host "  - all  (installs each into <TargetPath>\<framework>\)"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor Yellow
-    Write-Host "  .\install-offline.ps1 -Framework typescript-vite -TargetPath C:\myapp"
+    Write-Host "  .\install-offline.ps1 -Framework react-vite -TargetPath C:\myapp"
     Write-Host "  .\install-offline.ps1 -Framework all -TargetPath C:\projects"
 }
 

@@ -1,198 +1,153 @@
-# 📦 NPM Offline Package Collection
+# NPM Offline Repository
 
-Pre-downloaded `node_modules` for 11 web development framework configurations.
-Built for offline development environments — no internet required after setup.
+Build and ship a portable npm repository for offline Linux systems.
 
----
+This project creates:
 
-## 🗂 Frameworks Included
+- a Verdaccio registry storage bundle
+- a populated npm cache
+- exact `package-lock.json` files for each package set
+- optional prebuilt `node_modules` tarballs
+- install and verification scripts for the offline machine
 
-| Folder | Framework | Key Packages |
-|--------|-----------|-------------|
-| `typescript-vite` | React 18 + TypeScript + Vite | AG Grid Enterprise, Syncfusion (all), MUI v6, POS printing, MSSQL, PostgreSQL |
-| `react-vite` | React 18 + Vite | Full React ecosystem, charting, state management |
-| `nextjs` | Next.js 14 | App Router, Auth.js, SEO, i18n |
-| `vuejs-vite` | Vue 3 + Vite | Vuetify, Element Plus, Naive UI, Pinia |
-| `nuxt` | Nuxt 3 | Nuxt UI, @nuxtjs/*, content, image |
-| `angular` | Angular 18 | NgRx, Angular Material, PrimeNG, Syncfusion Angular |
-| `svelte` | SvelteKit | SMUI, Threlte (3D), SvelteKit adapters |
-| `remix` | Remix v2 | remix-auth, remix-utils, full React ecosystem |
-| `astro` | Astro 4 | Multi-framework (React/Vue/Svelte), MDX, SSG/SSR |
-| `gatsby` | Gatsby 5 | Source plugins, image, MDX, i18n |
-| `nodejs-backend` | Node.js Backend | Express, Fastify, NestJS, Hono, MSSQL, PostgreSQL, Redis |
+The goal is to let an offline computer install packages from a local npm registry at `http://localhost:4873`, or from another computer on the same LAN.
 
----
+## Package Sets
 
-## 🚀 Quick Start
+| Folder | Package set |
+|---|---|
+| `react-vite` | React + Vite application stack |
+| `nextjs` | Next.js application stack |
+| `vuejs-vite` | Vue + Vite application stack |
+| `nuxt` | Nuxt application stack |
+| `angular` | Angular application stack |
+| `svelte` | SvelteKit application stack |
+| `remix` | Remix application stack |
+| `astro` | Astro application stack |
+| `gatsby` | Gatsby application stack |
+| `nodejs-backend` | Node.js backend/API stack |
 
-### Option 1 — Download from Releases (Recommended)
+## Build Online
 
-1. Go to the [**Releases**](../../releases) page
-2. Download the tarball for your framework (e.g. `typescript-vite-node_modules.tar.gz`)
-   - Or download `npm-offline-all-frameworks-vX.X.X.tar.gz` for everything
-3. Extract into your project:
+Run this on the machine that has internet access:
 
-**Linux / macOS:**
 ```bash
-tar -xzf typescript-vite-node_modules.tar.gz -C /path/to/your/project/
+npm install -g verdaccio@latest
+bash scripts/build-offline-repository.sh
 ```
 
-**Windows (PowerShell):**
-```powershell
-tar -xzf typescript-vite-node_modules.tar.gz -C C:\path\to\project\
+The output is written to:
+
+```text
+artifacts/
+├── npm-offline-repository.tar.gz
+├── SHA256SUMS.txt
+└── offline-repository/
+    ├── npm-cache/
+    ├── package-sets/
+    ├── node_modules_by_framework/
+    ├── verdaccio/
+    ├── start-offline-registry.sh
+    ├── install-from-offline-repo.sh
+    └── verify-offline-repo.sh
 ```
 
-### Option 2 — Use the Install Scripts (in cumulative tarball)
+The build resolves the latest package versions allowed by the package ranges in each `package.json`, then freezes the result in lockfiles.
 
-**Linux / macOS:**
+## Ship Offline
+
+For a USB drive or external disk, copy the full folder:
+
+```text
+artifacts/offline-repository/
+```
+
+For GitHub Releases, download:
+
+- `npm-offline-repository.tar.gz`
+- `SHA256SUMS.txt`
+- any `*-node_modules.tar.gz` package sets you want prebuilt
+
+If you download prebuilt package tarballs separately, place them here after extracting `npm-offline-repository.tar.gz`:
+
 ```bash
-# Extract the cumulative tarball first
-tar -xzf npm-offline-all-frameworks-v1.0.0.tar.gz
-
-# Then install a specific framework
-chmod +x install-offline.sh
-./install-offline.sh typescript-vite /path/to/your/project
-
-# Or install all frameworks
-./install-offline.sh all /path/to/projects/
+mkdir -p node_modules_by_framework
+mv *-node_modules.tar.gz node_modules_by_framework/
 ```
 
-**Windows (PowerShell):**
-```powershell
-.\install-offline.ps1 -Framework typescript-vite -TargetPath C:\path\to\project
-# Or all frameworks:
-.\install-offline.ps1 -Framework all -TargetPath C:\projects
-```
+## Use on the Offline Linux Computer
 
-### Option 3 — Run the Workflow Yourself
+Install Verdaccio from the bundled npm cache:
 
-1. Fork this repo
-2. Go to **Actions → Download NPM Packages & Create Release**
-3. Click **Run workflow**
-4. Enter a tag (e.g. `v1.0.0`) and click **Run**
-5. Wait ~15–30 minutes for all parallel downloads to complete
-6. Download your release from the **Releases** page
-
----
-
-## ⚙️ After Extracting
-
-Your project folder will contain:
-```
-your-project/
-├── node_modules/     ← extracted from tarball
-├── package.json      ← copied automatically by install script
-└── .npmrc            ← sets prefer-offline=true
-```
-
-To install any additional packages or resolve lockfiles:
 ```bash
-npm install --prefer-offline --legacy-peer-deps
+npm install -g verdaccio --offline --cache ./npm-cache
 ```
 
----
+Start the local registry:
 
-## 🔧 Requirements
-
-- **Node.js** >= 20.0.0
-- **npm** >= 10.0.0
-- **tar** (built into Linux, macOS, Windows 10+)
-
----
-
-## 📋 Package Counts
-
-| Framework | Dependencies | DevDependencies | Total |
-|-----------|-------------|-----------------|-------|
-| typescript-vite | 621 | 251 | **872** |
-| react-vite | 621 | 251 | **872** |
-| nextjs | 485 | 180 | **665** |
-| vuejs-vite | 313 | 197 | **510** |
-| nuxt | 287 | 130 | **417** |
-| angular | 296 | 190 | **486** |
-| svelte | 258 | 175 | **433** |
-| remix | 461 | 174 | **635** |
-| astro | 313 | 158 | **471** |
-| gatsby | 392 | 192 | **584** |
-| nodejs-backend | 447 | 201 | **648** |
-
----
-
-## 🏗 How the Workflow Works
-
-```
-Push tag / Manual trigger
-        │
-        ▼
-┌─────────────────────────────────────┐
-│  11 parallel jobs (one per framework)│
-│  Each:                               │
-│    1. npm install --legacy-peer-deps │
-│    2. tar -czf node_modules.tar.gz   │
-│    3. Upload artifact                │
-└──────────────┬──────────────────────┘
-               │  all complete
-               ▼
-┌─────────────────────────────────────┐
-│  create-release job                 │
-│    1. Download all 11 artifacts     │
-│    2. Bundle into cumulative tarball│
-│    3. Publish GitHub Release with   │
-│       all tarballs as assets        │
-└─────────────────────────────────────┘
+```bash
+./start-offline-registry.sh
 ```
 
----
+In another terminal, install a package set into a project:
 
-## 📁 Repository Structure
-
-```
-npm-offline-repo/
-├── .github/
-│   └── workflows/
-│       └── download-packages.yml    ← Main workflow
-├── packages/
-│   ├── typescript-vite/
-│   │   └── package.json
-│   ├── react-vite/
-│   │   └── package.json
-│   ├── nextjs/
-│   │   └── package.json
-│   ├── vuejs-vite/
-│   │   └── package.json
-│   ├── nuxt/
-│   │   └── package.json
-│   ├── angular/
-│   │   └── package.json
-│   ├── svelte/
-│   │   └── package.json
-│   ├── remix/
-│   │   └── package.json
-│   ├── astro/
-│   │   └── package.json
-│   ├── gatsby/
-│   │   └── package.json
-│   └── nodejs-backend/
-│       └── package.json
-├── scripts/
-│   ├── install-offline.sh           ← Linux/macOS installer
-│   └── install-offline.ps1          ← Windows installer
-└── README.md
+```bash
+./install-from-offline-repo.sh react-vite /home/user/myapp
 ```
 
----
+By default, the installer extracts the prebuilt `node_modules` tarball when it exists. That is the safest path for native packages. To force a fresh offline install from the registry/cache:
 
-## ⚠️ Notes
+```bash
+USE_PREBUILT=0 ./install-from-offline-repo.sh react-vite /home/user/myapp
+```
 
-- All packages installed with `--legacy-peer-deps` for maximum compatibility
-- Some native addons (e.g. `sharp`, `argon2`, `better-sqlite3`) may need
-  recompilation for your target OS/architecture after extraction
-- The `node_modules` tarballs are built on **Ubuntu** (GitHub Actions runner)
-- For Windows targets, native modules may need: `npm rebuild`
-- Tarball sizes vary: expect 500MB–2GB per framework uncompressed
+## Use on a Village LAN
 
----
+Run the registry on one computer:
 
-## 📜 License
+```bash
+HOST=0.0.0.0 PORT=4873 ./start-offline-registry.sh
+```
 
-MIT — free to use, modify, and distribute.
+On another computer, point npm to it:
+
+```bash
+npm set registry http://SERVER_IP:4873
+npm install react vite express
+```
+
+Replace `SERVER_IP` with the LAN IP of the computer running Verdaccio.
+
+## Verify Before Shipping
+
+After building, run:
+
+```bash
+bash artifacts/offline-repository/verify-offline-repo.sh
+```
+
+This starts the offline registry and checks that every package set can install from the local registry/cache without internet.
+
+## Important Native Package Notes
+
+Some packages download or compile native binaries, for example `sharp`, `better-sqlite3`, `sqlite3`, `serialport`, `electron`, `cypress`, and browser automation tools.
+
+For the most reliable result, keep these the same between the online build machine and the offline machine:
+
+- Linux distribution and version
+- CPU architecture, for example x64
+- Node.js version
+- npm version
+- glibc version
+
+The prebuilt `node_modules` tarballs are included for this reason. They avoid most offline rebuild problems when the target Linux environment matches the build environment.
+
+## GitHub Release Workflow
+
+The workflow at `.github/workflows/download-packages.yml` builds:
+
+- `npm-offline-repository.tar.gz`
+- one prebuilt `node_modules` tarball per package set
+- `SHA256SUMS.txt`
+
+Manual runs let you choose the Node.js version and release tag. Pushes to `main` or `master` create a dated prerelease tag. Version tags like `v1.2.0` create versioned releases.

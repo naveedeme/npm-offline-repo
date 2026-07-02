@@ -7,7 +7,7 @@
 #   ./install-offline.sh <framework> <target-path>
 #
 # Examples:
-#   ./install-offline.sh typescript-vite /home/user/myapp
+#   ./install-offline.sh react-vite /home/user/myapp
 #   ./install-offline.sh nextjs /var/www/mysite
 #   ./install-offline.sh all /home/user/   # extracts each to its own subfolder
 #
@@ -59,7 +59,7 @@ print_usage() {
   echo "  - all  (installs each into <target-path>/<framework>/)"
   echo ""
   echo -e "${BOLD}Examples:${NC}"
-  echo "  $0 typescript-vite /home/user/myapp"
+  echo "  $0 react-vite /home/user/myapp"
   echo "  $0 all /home/user/projects"
 }
 
