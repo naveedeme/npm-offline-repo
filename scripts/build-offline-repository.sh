@@ -18,6 +18,7 @@ REGISTRY_LISTEN="${REGISTRY_LISTEN:-${REGISTRY_HOST}:${REGISTRY_PORT}}"
 REGISTRY_URL="${REGISTRY_URL:-http://${REGISTRY_HOST}:${REGISTRY_PORT}}"
 NODE_VERSION_REQUIRED="${NODE_VERSION_REQUIRED:-}"
 BUILD_VARIANT="${BUILD_VARIANT:-unknown-linux}"
+PACKAGE_SET="${PACKAGE_SET:-}"
 NPM_CACHE_DIR="${BUILD_DIR}/npm-cache"
 VERDACCIO_STORAGE_DIR="${BUILD_DIR}/verdaccio/storage"
 PACKAGE_SETS_DIR="${BUILD_DIR}/package-sets"
@@ -185,6 +186,10 @@ for package_json in "$PACKAGES_DIR"/*/package.json; do
   [ -f "$package_json" ] || continue
 
   set_name="$(basename "$(dirname "$package_json")")"
+  if [ -n "$PACKAGE_SET" ] && [ "$set_name" != "$PACKAGE_SET" ]; then
+    continue
+  fi
+
   work_dir="${BUILD_DIR}/work/${set_name}"
   set_out="${PACKAGE_SETS_DIR}/${set_name}"
   mkdir -p "$work_dir" "$set_out"
@@ -194,7 +199,11 @@ for package_json in "$PACKAGES_DIR"/*/package.json; do
   (
     cd "$work_dir"
     npm install --legacy-peer-deps --registry "$REGISTRY_URL" --cache "$NPM_CACHE_DIR" \
-      > "${LOG_DIR}/${set_name}-install.log" 2>&1
+      > "${LOG_DIR}/${set_name}-install.log" 2>&1 || {
+        echo "npm install failed for ${set_name}. Last 200 log lines:" >&2
+        tail -n 200 "${LOG_DIR}/${set_name}-install.log" >&2
+        exit 1
+      }
     npm ls --all --json > "${REPORTS_DIR}/${set_name}-tree.json" 2>/dev/null || true
   )
 
@@ -242,6 +251,11 @@ NODE
     df -h "$BUILD_DIR"
   fi
 done
+
+if [ "$FIRST_SET" = true ]; then
+  echo "Error: no package sets were built. PACKAGE_SET='${PACKAGE_SET}'" >&2
+  exit 1
+fi
 
 printf '\n  ]\n' >> "$MANIFEST"
 printf '}\n' >> "$MANIFEST"

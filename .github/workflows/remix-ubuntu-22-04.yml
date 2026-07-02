@@ -1,0 +1,238 @@
+name: Remix Offline Ubuntu 22.04
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag name. Leave blank to auto-generate.'
+        required: false
+        default: ''
+      node_version:
+        description: 'Node.js version bundled into the offline package'
+        required: false
+        default: '24.18.0'
+      include_node_modules:
+        description: 'Include prebuilt node_modules tarball. Recommended for native packages.'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      verify_offline:
+        description: 'Run npm ci --offline verification. Slow.'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PACKAGE_SET: remix
+  UBUNTU_VARIANT: ubuntu-22.04
+  NODE_VERSION: ${{ github.event.inputs.node_version || '24.18.0' }}
+
+jobs:
+  build:
+    name: Build remix on ubuntu-22.04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          else
+            TAG="${PACKAGE_SET}-${UBUNTU_VARIANT}-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}-$(echo '${{ github.sha }}' | cut -c1-7)"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "Could not resolve release tag." >&2
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: ${TAG}"
+
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          sudo apt-get clean
+          df -h
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Show build environment
+        shell: bash
+        run: |
+          node -v
+          npm -v
+          uname -a
+          cat /etc/os-release
+
+      - name: Install Verdaccio
+        shell: bash
+        run: npm install -g verdaccio@latest
+
+      - name: Build offline package
+        shell: bash
+        env:
+          BUILD_VARIANT: ${{ env.UBUNTU_VARIANT }}
+          PACKAGE_SET: ${{ env.PACKAGE_SET }}
+        run: bash scripts/build-offline-repository.sh
+
+      - name: Verify offline install path
+        if: github.event.inputs.verify_offline == 'true'
+        shell: bash
+        run: bash artifacts/offline-repository/verify-offline-repo.sh
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          cp artifacts/npm-offline-repository.tar.gz \
+            "release-artifacts/${PACKAGE_SET}-offline-repository-${UBUNTU_VARIANT}.tar.gz"
+
+          if [ "${{ github.event.inputs.include_node_modules }}" != "false" ]; then
+            cp "artifacts/offline-repository/node_modules_by_framework/${PACKAGE_SET}-node_modules.tar.gz" \
+              "release-artifacts/${PACKAGE_SET}-node_modules-${UBUNTU_VARIANT}.tar.gz"
+          fi
+
+          bash scripts/write-package-installer.sh \
+            "$UBUNTU_VARIANT" \
+            "$PACKAGE_SET" \
+            "release-artifacts/install-${PACKAGE_SET}-${UBUNTU_VARIANT}-offline.sh"
+
+          (
+            cd release-artifacts
+            for file in *.tar.gz; do
+              [ -f "$file" ] || continue
+              if [ "$(stat -c%s "$file")" -gt 1900000000 ]; then
+                split -b 1900M "$file" "${file}.part-"
+                rm "$file"
+              fi
+            done
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS-*' -printf '%f\0' \
+              | sort -z \
+              | xargs -0 sha256sum > "SHA256SUMS-${PACKAGE_SET}-${UBUNTU_VARIANT}.txt"
+          )
+
+      - name: List release files
+        shell: bash
+        run: find release-artifacts -type f -exec du -h {} \; | sort -h
+
+      - name: Print install logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -d artifacts/offline-repository/logs ]; then
+            for log in artifacts/offline-repository/logs/*.log; do
+              [ -f "$log" ] || continue
+              echo "::group::$(basename "$log")"
+              tail -n 200 "$log" || true
+              echo "::endgroup::"
+            done
+          fi
+
+      - name: Upload install log artifact on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ env.PACKAGE_SET }}-${{ env.UBUNTU_VARIANT }}
+          path: artifacts/offline-repository/logs/*
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Generate release notes
+        shell: bash
+        run: |
+          BUILT_AT=$(date -u '+%Y-%m-%d %H:%M UTC')
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" 2>/dev/null || echo "No commit message")
+          COMMIT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          cat > release_notes.md <<EOF
+          ## ${PACKAGE_SET} Offline Package for ${UBUNTU_VARIANT}
+
+          Built on: ${BUILT_AT}
+          Commit: \`${COMMIT_SHA}\`
+          Node.js bundled through nvm: \`${{ env.NODE_VERSION }}\`
+
+          > ${COMMIT_MSG}
+
+          ### Download
+
+          Download these files into the same directory on the offline computer:
+
+          - \`install-${PACKAGE_SET}-${UBUNTU_VARIANT}-offline.sh\`
+          - \`${PACKAGE_SET}-offline-repository-${UBUNTU_VARIANT}.tar.gz\`
+          - \`${PACKAGE_SET}-node_modules-${UBUNTU_VARIANT}.tar.gz\` if present; optional but recommended
+
+          ### Install Offline
+
+          \`\`\`bash
+          chmod +x install-${PACKAGE_SET}-${UBUNTU_VARIANT}-offline.sh
+          ./install-${PACKAGE_SET}-${UBUNTU_VARIANT}-offline.sh /home/user/myapp
+          \`\`\`
+
+          If no path is given, the installer uses \`\$HOME/${PACKAGE_SET}-offline-app\`.
+          The repository bundle contains nvm, Node.js, npm, Verdaccio cache/storage, lockfiles, and scripts for this package set only.
+
+          ### Split Assets
+
+          If a tarball was split, keep all \`.part-*\` files in the same directory. The installer will reassemble them automatically.
+          EOF
+
+      - name: Replace existing release tag
+        shell: bash
+        run: |
+          gh release delete "${{ steps.tag.outputs.tag }}" --yes 2>/dev/null || true
+          git push origin --delete "${{ steps.tag.outputs.tag }}" 2>/dev/null || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: '${{ env.PACKAGE_SET }} offline package for ${{ env.UBUNTU_VARIANT }}'
+          body_path: release_notes.md
+          draft: false
+          prerelease: true
+          make_latest: false
+          files: |
+            release-artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "## ${PACKAGE_SET} offline package for ${UBUNTU_VARIANT}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tag:** \`${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Artifact | Size |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|" >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r file; do
+            size=$(du -h "$file" | cut -f1)
+            echo "| \`$(basename "$file")\` | ${size} |" >> "$GITHUB_STEP_SUMMARY"
+          done < <(find release-artifacts -type f | sort)
+

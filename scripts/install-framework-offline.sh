@@ -10,7 +10,7 @@ Example:
   ./install-framework-offline.sh ubuntu-22.04 react-vite /home/user/my-react-app
 
 Put the downloaded release files in this same directory first:
-  npm-offline-repository-ubuntu-22.04.tar.gz
+  react-vite-offline-repository-ubuntu-22.04.tar.gz
   react-vite-node_modules-ubuntu-22.04.tar.gz
 
 If GitHub split a large asset, keep all .part-* files in this directory too.
@@ -26,7 +26,8 @@ VARIANT="$1"
 PACKAGE_SET="$2"
 TARGET_PATH="$3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_TARBALL="npm-offline-repository-${VARIANT}.tar.gz"
+REPO_TARBALL="${PACKAGE_SET}-offline-repository-${VARIANT}.tar.gz"
+LEGACY_REPO_TARBALL="npm-offline-repository-${VARIANT}.tar.gz"
 MODULE_TARBALL="${PACKAGE_SET}-node_modules-${VARIANT}.tar.gz"
 
 cd "$SCRIPT_DIR"
@@ -45,7 +46,12 @@ assemble_if_split() {
 }
 
 assemble_if_split "$REPO_TARBALL"
+assemble_if_split "$LEGACY_REPO_TARBALL"
 assemble_if_split "$MODULE_TARBALL"
+
+if [ ! -f "$REPO_TARBALL" ] && [ -f "$LEGACY_REPO_TARBALL" ]; then
+  REPO_TARBALL="$LEGACY_REPO_TARBALL"
+fi
 
 if [ ! -f "install-from-offline-repo.sh" ]; then
   if [ ! -f "$REPO_TARBALL" ]; then

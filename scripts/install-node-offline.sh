@@ -76,17 +76,28 @@ fi
 mkdir -p "$NVM_DIR"
 
 if [ ! -f "${NVM_DIR}/nvm.sh" ]; then
+  echo "Installing nvm into ${NVM_DIR}..."
   tar -xzf "$NVM_TARBALL" -C "$NVM_DIR" --strip-components=1
+else
+  echo "Reusing existing nvm at ${NVM_DIR}"
 fi
 
 mkdir -p "${NVM_DIR}/.cache/bin/${NODE_SLUG}"
-cp "$NODE_TARBALL" "${NVM_DIR}/.cache/bin/${NODE_SLUG}/${NODE_SLUG}.tar.xz"
+if [ ! -f "${NVM_DIR}/.cache/bin/${NODE_SLUG}/${NODE_SLUG}.tar.xz" ]; then
+  cp "$NODE_TARBALL" "${NVM_DIR}/.cache/bin/${NODE_SLUG}/${NODE_SLUG}.tar.xz"
+fi
 
 set +u
 . "${NVM_DIR}/nvm.sh"
 set -u
 
-nvm install --offline "$NODE_VERSION" --default
+if [ -x "${NVM_DIR}/versions/node/${NODE_VERSION}/bin/node" ]; then
+  echo "Reusing existing Node.js ${NODE_VERSION}"
+  nvm alias default "$NODE_VERSION" >/dev/null
+else
+  echo "Installing Node.js ${NODE_VERSION} from bundled offline runtime..."
+  nvm install --offline "$NODE_VERSION" --default
+fi
 nvm use "$NODE_VERSION"
 
 cat > "$ENV_FILE" <<ENV
